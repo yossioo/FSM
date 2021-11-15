@@ -16,7 +16,7 @@ using CallbackT = std::function<void()>;
 using ConditionT = std::function<bool()>;
 using TransitionConditionMetCallbackT = std::function<void(std::string, std::string, std::string)>;
 
-bool oneTimeCondition(bool * flag)
+inline bool oneTimeCondition(bool * flag)
 {
   if (*flag)
   {
