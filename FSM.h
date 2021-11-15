@@ -6,144 +6,161 @@
 #include <functional>
 #include <utility>
 
-using CallbackT = std::function<void()>;
-using ConditionT = std::function<bool()>;
-
 namespace functional_state_machine
 {
+class State;
+
+class Transition;
+
+using CallbackT = std::function<void()>;
+using ConditionT = std::function<bool()>;
+using TransitionConditionMetCallbackT = std::function<void(std::string, std::string, std::string)>;
+
+bool oneTimeCondition(bool * flag)
+{
+  if (*flag)
+  {
+    *flag = false;
+    return true;
+  }
+  return false;
+}
+
 class State
 {
   explicit State(std::string name = "default",
                  CallbackT _in_state = []() {},
                  CallbackT _on_enter = []() {},
                  CallbackT _on_exit = []() {}) :
-      name(
-          std::move(name)), in_state(std::move(_in_state)), on_enter(std::move(_on_enter)), on_exit(std::move(_on_exit))
-  {}
+    name(
+      std::move(name)), in_state(std::move(_in_state)), on_enter(std::move(_on_enter)), on_exit(std::move(_on_exit)) {}
 
 public:
-  const std::string name = "no-name";
+  const std::string name;
   const CallbackT in_state = []() {};
   const CallbackT on_enter = []() {};
   const CallbackT on_exit = []() {};
   
+  std::vector<Transition> transitions_;
+  
   typedef std::shared_ptr<State> SharedPtr;
   
-  static SharedPtr createState(std::string name = "shared_state", CallbackT _in_state = nullptr,
-                               CallbackT _on_enter = nullptr,
-                               CallbackT _on_exit = nullptr)
+  static SharedPtr createStateSharedPtr(std::string name = "shared_state", CallbackT _in_state = []() {},
+                                        CallbackT _on_enter = []() {},
+                                        CallbackT _on_exit = []() {})
   {
-    makeEmpty(_in_state);
-    makeEmpty(_on_enter);
-    makeEmpty(_on_exit);
-    auto state = new State{std::move(name), _in_state, _on_enter, _on_exit};
+    auto state = new State{std::move(name), std::move(_in_state), std::move(_on_enter), std::move(_on_exit)};
     SharedPtr state_ptr;
     state_ptr.reset(state);
     return state_ptr;
   }
   
-  /// Not so sure about that, maybe think of better way to create empty state?
-  static void makeEmpty(CallbackT &callback_t)
-  {
-    if (nullptr == callback_t)
-    {
-      callback_t = []() {};
-    }
-  }
-  
-  virtual ~State()
-  {
-    std::cout << "Destructing state: " << name << std::endl;
-  }
+  ~State() = default;
 };
 
-struct Transition
+class Transition
 {
+public:
   State::SharedPtr target_state_ptr;
   ConditionT condition;
   std::string reason;
   
   Transition(State::SharedPtr target_state_ptr, ConditionT condition, std::string reason)
-      : target_state_ptr(std::move(target_state_ptr)), condition(std::move(condition)), reason(std::move(reason))
-  {}
+    : target_state_ptr(std::move(target_state_ptr)), condition(std::move(condition)), reason(std::move(reason)) {}
   
-  virtual ~Transition()
-  {
-    printf("Destructing =>%s (%s)\n", target_state_ptr->name.c_str(), reason.c_str());
-  }
+  ~Transition() = default;
 };
 
 class StateMachine
 {
   std::vector<State::SharedPtr> states_;
-  std::map<State::SharedPtr, std::vector<Transition>> transitions_;
   
-  State::SharedPtr current_state;
-  State::SharedPtr previous_state;
-  State::SharedPtr next_state;
+  State::SharedPtr current_state_;
+  State::SharedPtr previous_state_;
+  State::SharedPtr next_state_;
   
-  CallbackT any_tick_callback = []() {};
-  CallbackT any_change_callback = []() {};
-
+  CallbackT any_tick_callback_;
+  CallbackT any_change_callback_;
+  TransitionConditionMetCallbackT transition_condition_met_callback_;
 public:
   void spinOnce()
   {
-    if (next_state != current_state)
-    {
-      if (current_state)
-      {
-        current_state->on_exit();
-      }
-      next_state->on_enter();
-      
-      previous_state = current_state;
-      current_state = next_state;
-      
-      any_change_callback();
-    }
+    checkChangeToNext();
     
-    if (current_state)
-    {
-      current_state->in_state();
-    }
-    for (const auto &transition: transitions_[current_state])
+    current_state_->in_state();
+    for (const auto &transition: current_state_->transitions_)
     {
       if (transition.condition())
       {
-        next_state = transition.target_state_ptr;
+        next_state_ = transition.target_state_ptr;
+        if (transition_condition_met_callback_)
+        {
+          transition_condition_met_callback_(current_state_->name, next_state_->name, transition.reason);
+        }
       }
     }
-    // Finally,
-    any_tick_callback();
+    
+    if (any_tick_callback_)
+    {
+      any_tick_callback_();
+    }
+  }
+  
+  void checkChangeToNext()
+  {
+    if (not isCurrentState(next_state_))
+    {
+      if (current_state_)
+      {
+        current_state_->on_exit();
+      }
+      if (any_change_callback_)
+      {
+        any_change_callback_();
+      }
+      previous_state_ = current_state_;
+      current_state_ = next_state_;
+      current_state_->on_enter();
+    }
   }
   
   void addState(const State::SharedPtr &state)
   {
     states_.emplace_back(state);
-    if (not next_state)
+    if (not next_state_)
     {
-      next_state = state;
+      next_state_ = state;
     }
   }
   
   void addOnAnyTick(CallbackT callback)
   {
-    any_tick_callback = std::move(callback);
+    any_tick_callback_ = std::move(callback);
+  }
+  
+  void addOnTransitionConditionMet(TransitionConditionMetCallbackT callback)
+  {
+    transition_condition_met_callback_ = std::move(callback);
   }
   
   void addOnAnyChange(CallbackT callback)
   {
-    any_change_callback = std::move(callback);
+    any_change_callback_ = std::move(callback);
   }
   
   void returnToPreviousState()
   {
-    next_state = previous_state;
+    next_state_ = previous_state_;
   }
   
-  void addTransition(const State::SharedPtr &from_state, const Transition &transition)
+  [[nodiscard]] bool isCurrentState(const State::SharedPtr &other) const
   {
-    transitions_[from_state].emplace_back(transition);
+    return other == current_state_;
+  }
+  
+  [[nodiscard]] bool isPreviousState(const State::SharedPtr &other) const
+  {
+    return other == previous_state_;
   }
 };
 }
