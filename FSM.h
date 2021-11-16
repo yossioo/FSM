@@ -74,6 +74,7 @@ public:
 class StateMachine
 {
   std::vector<State::SharedPtr> states_;
+  std::vector<Transition> transition_from_any_state_;
   
   State::SharedPtr current_state_;
   State::SharedPtr previous_state_;
@@ -90,19 +91,28 @@ public:
     current_state_->in_state();
     for (const auto &transition: current_state_->transitions_)
     {
-      if (transition.condition())
-      {
-        next_state_ = transition.target_state_ptr;
-        if (transition_condition_met_callback_)
-        {
-          transition_condition_met_callback_(current_state_->name, next_state_->name, transition.reason);
-        }
-      }
+      checkTransition(transition);
+    }
+    for (const auto &transition: transition_from_any_state_)
+    {
+      checkTransition(transition);
     }
     
     if (any_tick_callback_)
     {
       any_tick_callback_();
+    }
+  }
+  
+  void checkTransition(const Transition &transition)
+  {
+    if (transition.condition())
+    {
+      next_state_ = transition.target_state_ptr;
+      if (transition_condition_met_callback_)
+      {
+        transition_condition_met_callback_(current_state_->name, next_state_->name, transition.reason);
+      }
     }
   }
   
@@ -122,6 +132,11 @@ public:
       current_state_ = next_state_;
       current_state_->on_enter();
     }
+  }
+  
+  void addTransitionFromAnyState(const Transition& transition)
+  {
+    transition_from_any_state_.emplace_back(transition);
   }
   
   void addState(const State::SharedPtr &state)
