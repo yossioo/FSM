@@ -134,7 +134,7 @@ public:
     }
   }
   
-  void addTransitionFromAnyState(const Transition& transition)
+  void addTransitionFromAnyState(const Transition &transition)
   {
     transition_from_any_state_.emplace_back(transition);
   }
