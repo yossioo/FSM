@@ -66,7 +66,7 @@ public:
   std::string reason;
   
   Transition(State::SharedPtr target_state_ptr, ConditionT condition, std::string reason)
-    : target_state_ptr(std::move(target_state_ptr)), condition(std::move(condition)), reason(std::move(reason)) {}
+    : target_state_ptr(target_state_ptr), condition(std::move(condition)), reason(std::move(reason)) {}
   
   ~Transition() = default;
 };
