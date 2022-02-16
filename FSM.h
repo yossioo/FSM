@@ -177,5 +177,9 @@ public:
   {
     return other == previous_state_;
   }
+
+  std::string getCurrentStateName(){
+    return current_state_->name;
+  }
 };
 }
