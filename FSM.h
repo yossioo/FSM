@@ -106,6 +106,10 @@ public:
   
   void checkTransition(const Transition &transition)
   {
+    if (current_state_ == transition.target_state_ptr)
+    {
+      return;
+    }
     if (transition.condition())
     {
       next_state_ = transition.target_state_ptr;
